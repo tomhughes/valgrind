@@ -1801,6 +1801,12 @@ Bool ML_(read_elf_debug_info) ( struct _DebugInfo* di )
          TRACE_SYMTAB("rw_map:  avma %#lx   size %lu  foff %ld\n",
                       map->avma, map->size, map->foff);
    }
+   for (i = 0; i < VG_(sizeXA)(di->fsm.maps); i++) {
+      const DebugInfoMapping* map = VG_(indexXA)(di->fsm.maps, i);
+      if (map->ro)
+         TRACE_SYMTAB("ro_map:  avma %#lx   size %lu  foff %ld\n",
+                      map->avma, map->size, map->foff);
+   }
 
    if (phdr_mnent == 0
        || !ML_(img_valid)(mimg, phdr_mioff, phdr_mnent * phdr_ment_szB)) {
@@ -1881,7 +1887,7 @@ Bool ML_(read_elf_debug_info) ( struct _DebugInfo* di )
                Bool loaded = False;
                for (j = 0; j < VG_(sizeXA)(di->fsm.maps); j++) {
                   const DebugInfoMapping* map = VG_(indexXA)(di->fsm.maps, j);
-                  if (   (map->rx || map->rw)
+                  if (   (map->rx || map->rw || map->ro)
                       && map->size > 0 /* stay sane */
                       && a_phdr.p_offset >= map->foff
                       && a_phdr.p_offset <  map->foff + map->size
@@ -1909,6 +1915,16 @@ Bool ML_(read_elf_debug_info) ( struct _DebugInfo* di )
                         VG_(addToXA)(svma_ranges, &item);
                         TRACE_SYMTAB(
                            "PT_LOAD[%ld]:   acquired as rx, bias 0x%lx\n",
+                           i, (UWord)item.bias);
+                        loaded = True;
+                     }
+                     if (map->ro
+                         && (a_phdr.p_flags & (PF_R | PF_W | PF_X))
+                            == PF_R) {
+                        item.exec = False;
+                        VG_(addToXA)(svma_ranges, &item);
+                        TRACE_SYMTAB(
+                           "PT_LOAD[%ld]:   acquired as ro, bias 0x%lx\n",
                            i, (UWord)item.bias);
                         loaded = True;
                      }
